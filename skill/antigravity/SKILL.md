@@ -24,7 +24,7 @@ The C2C Bridge gives ChatGPT read-only MCP access to the current workspace over 
 6. **ALWAYS use the `chatgpt-browser` MCP tools (Playwright) to interact with ChatGPT Web automatically.** Never just print prompts to screen.
 
 ## Locations
-- The codex-with-chatgpt checkout lives at: `<ACTUAL_CHECKOUT_PATH>`
+- The codex-with-chatgpt checkout lives at: `/home/jiro/codex-with-chatgpt`
 - CLI runner: `node "<checkout>/bin/c2c.js" <command>` (or `c2c <command>` if globally installed).
 - All commands support `--json` for machine-readable JSON output.
 - Workspace flag: pass `-w <workspace root>` for workspace-scoped commands.
