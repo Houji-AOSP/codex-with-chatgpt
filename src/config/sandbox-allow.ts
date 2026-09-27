@@ -6,11 +6,18 @@ import { getStateDir } from "./paths.js";
 const TABLE = "sandbox_workspace_write";
 const KEY = "writable_roots";
 
+export interface AntigravityAllowResult {
+  added: boolean;
+  alreadyAllowed: boolean;
+  configPath: string;
+}
+
 export interface SandboxAllowResult {
   added: boolean;
   alreadyAllowed: boolean;
   stateDir: string;
   configPath: string;
+  antigravity?: AntigravityAllowResult;
 }
 
 export function getCodexHome(): string {
@@ -21,6 +28,16 @@ export function getCodexHome(): string {
 
 export function getCodexConfigPath(): string {
   return path.join(getCodexHome(), "config.toml");
+}
+
+export function getAntigravityHome(): string {
+  const fromEnv = process.env.ANTIGRAVITY_HOME?.trim() || process.env.GEMINI_HOME?.trim();
+  if (fromEnv) return path.resolve(fromEnv);
+  return path.join(os.homedir(), ".gemini");
+}
+
+export function getAntigravitySettingsPath(): string {
+  return path.join(getAntigravityHome(), "antigravity-cli", "settings.json");
 }
 
 /** POSIX slashes are valid in TOML and accepted by Codex on Windows. */
@@ -48,12 +65,66 @@ export function isStateDirAllowlisted(content: string, stateDir: string): boolea
 }
 
 /**
- * Idempotently add the C2C state directory to Codex's sandbox writable_roots.
+ * Idempotently add workspace root and C2C state dir to Antigravity CLI's trustedWorkspaces.
+ */
+export function ensureAntigravityAllowlist(opts?: {
+  settingsPath?: string;
+  workspaceRoot?: string;
+  stateDir?: string;
+}): AntigravityAllowResult {
+  const settingsPath = opts?.settingsPath ?? getAntigravitySettingsPath();
+  const stateDir = path.resolve(opts?.stateDir ?? getStateDir());
+  const workspaceRoot = path.resolve(opts?.workspaceRoot ?? process.cwd());
+
+  if (fs.existsSync(settingsPath)) {
+    try {
+      const raw = fs.readFileSync(settingsPath, "utf8");
+      const data = JSON.parse(raw);
+      if (!Array.isArray(data.trustedWorkspaces)) {
+        data.trustedWorkspaces = [];
+      }
+      let changed = false;
+      const candidates = [workspaceRoot, stateDir];
+      for (const candidate of candidates) {
+        if (!data.trustedWorkspaces.some((w: string) => pathsEquivalent(w, candidate))) {
+          data.trustedWorkspaces.push(candidate);
+          changed = true;
+        }
+      }
+      if (data.allowNonWorkspaceAccess !== true) {
+        data.allowNonWorkspaceAccess = true;
+        changed = true;
+      }
+      if (changed) {
+        fs.writeFileSync(settingsPath, JSON.stringify(data, null, 2) + "\n", "utf8");
+        return { added: true, alreadyAllowed: false, configPath: settingsPath };
+      }
+      return { added: false, alreadyAllowed: true, configPath: settingsPath };
+    } catch {
+      // JSON parse error or read error; fallback below
+    }
+  }
+
+  // File does not exist yet or was unparseable
+  fs.mkdirSync(path.dirname(settingsPath), { recursive: true, mode: 0o700 });
+  const initial = {
+    allowNonWorkspaceAccess: true,
+    trustedWorkspaces: [workspaceRoot, stateDir],
+  };
+  fs.writeFileSync(settingsPath, JSON.stringify(initial, null, 2) + "\n", { encoding: "utf8", mode: 0o600 });
+  return { added: true, alreadyAllowed: false, configPath: settingsPath };
+}
+
+/**
+ * Idempotently add the C2C state directory to Codex's sandbox writable_roots
+ * and (when present) Antigravity CLI's trustedWorkspaces.
  * Works on macOS, Windows, and Linux. Never rewrites unrelated config.
  */
 export function ensureSandboxAllowlist(opts?: {
   configPath?: string;
   stateDir?: string;
+  antigravitySettingsPath?: string;
+  workspaceRoot?: string;
 }): SandboxAllowResult {
   const stateDir = path.resolve(opts?.stateDir ?? getStateDir());
   const configPath = opts?.configPath ?? getCodexConfigPath();
@@ -61,18 +132,47 @@ export function ensureSandboxAllowlist(opts?: {
   fs.mkdirSync(path.dirname(configPath), { recursive: true, mode: 0o700 });
 
   const previous = fs.existsSync(configPath) ? fs.readFileSync(configPath, "utf8") : "";
+  let codexAdded = false;
+  let codexAlreadyAllowed = false;
+
   if (isStateDirAllowlisted(previous, stateDir)) {
-    return { added: false, alreadyAllowed: true, stateDir, configPath };
+    codexAlreadyAllowed = true;
+  } else {
+    const next = upsertWritableRoot(previous, stateDir);
+    fs.writeFileSync(configPath, next, { encoding: "utf8", mode: 0o600 });
+    try {
+      fs.chmodSync(configPath, 0o600);
+    } catch {
+      // Windows / filesystems without chmod semantics
+    }
+    codexAdded = true;
   }
 
-  const next = upsertWritableRoot(previous, stateDir);
-  fs.writeFileSync(configPath, next, { encoding: "utf8", mode: 0o600 });
-  try {
-    fs.chmodSync(configPath, 0o600);
-  } catch {
-    // Windows / filesystems without chmod semantics
+  // Antigravity allowlist (only if explicitly requested via options, or if default runtime and Antigravity is detected)
+  let antigravity: AntigravityAllowResult | undefined;
+  const shouldCheckAntigravity =
+    opts?.antigravitySettingsPath != null ||
+    (opts?.configPath == null && (fs.existsSync(getAntigravitySettingsPath()) || fs.existsSync(getAntigravityHome())));
+
+  if (shouldCheckAntigravity) {
+    try {
+      antigravity = ensureAntigravityAllowlist({
+        settingsPath: opts?.antigravitySettingsPath,
+        stateDir,
+        workspaceRoot: opts?.workspaceRoot,
+      });
+    } catch {
+      // Ignore Antigravity error if Codex already succeeded
+    }
   }
-  return { added: true, alreadyAllowed: false, stateDir, configPath };
+
+  return {
+    added: codexAdded || (antigravity?.added ?? false),
+    alreadyAllowed: codexAlreadyAllowed && (antigravity ? antigravity.alreadyAllowed : true),
+    stateDir,
+    configPath,
+    antigravity,
+  };
 }
 
 export function upsertWritableRoot(content: string, stateDir: string): string {

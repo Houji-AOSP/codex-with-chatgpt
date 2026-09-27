@@ -1,4 +1,5 @@
 import { Command, InvalidArgumentError } from "commander";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
@@ -27,6 +28,14 @@ import {
 import { Logger } from "../logger/index.js";
 import { getStateDir } from "../config/paths.js";
 import { ensureSandboxAllowlist, getCodexConfigPath, isStateDirAllowlisted } from "../config/sandbox-allow.js";
+import { installSkills, type SkillTarget, type SkillScope } from "../config/skill-install.js";
+import {
+  BOOT_PROMPT,
+  buildInitPrompt,
+  buildExecutedPrompt,
+  buildHandoffPrompt,
+} from "../prompt/templates.js";
+import { openBrowserUrl } from "../util/open-browser.js";
 import { mergeUiPrefs, readUiPrefs, SETUP_MODES, type SetupMode } from "../config/ui-prefs.js";
 import {
   CHATGPT_CREATE_CONNECTOR_URL,
@@ -154,11 +163,11 @@ function tunnelChoicePayload(workspace: Workspace, zoneHint?: string): Record<st
   };
 }
 
-function trySandboxAllow():
-  | { ok: true; added: boolean; alreadyAllowed: boolean; stateDir: string; configPath: string }
+function trySandboxAllow(workspaceRoot?: string):
+  | { ok: true; added: boolean; alreadyAllowed: boolean; stateDir: string; configPath: string; antigravity?: any }
   | { ok: false; added: false; alreadyAllowed: false; error: string } {
   try {
-    const result = ensureSandboxAllowlist();
+    const result = ensureSandboxAllowlist({ workspaceRoot });
     return { ok: true, ...result };
   } catch (error) {
     return { ok: false, added: false, alreadyAllowed: false, error: (error as Error).message };
@@ -294,7 +303,7 @@ program
         say("正在连接 ChatGPT…");
         say("");
       }
-      const sandbox = trySandboxAllow();
+      const sandbox = trySandboxAllow(root);
       const { runtime, info, mcpUrl } = await ensureBridgeAndTunnel(root, { tunnel: opts.tunnel });
       const connectorName = mcpUrl
         ? persistWorkspaceEndpoint({
@@ -435,10 +444,11 @@ program
 
     // Codex sandbox writable_roots (so later chats do not need elevation)
     if (opts.fix) {
-      const sandbox = trySandboxAllow();
+      const sandbox = trySandboxAllow(root);
       if (sandbox.ok) {
         report.sandbox = { ok: true, detail: sandbox.alreadyAllowed ? "已在白名单" : "已写入白名单" };
         if (sandbox.added) results.push("已将本地设置目录加入 Codex 沙箱白名单");
+        if (sandbox.antigravity?.added) results.push("已将工作区与本地设置加入 Antigravity CLI 白名单");
       } else {
         report.sandbox = { ok: false, detail: sandbox.error };
       }
@@ -780,28 +790,65 @@ program
     }
   });
 
-// ---------------------------------------------------------------- sandbox-allow (Codex writable_roots, macOS + Windows)
+// ---------------------------------------------------------------- sandbox-allow (Codex writable_roots & Antigravity settings)
 
 acceptUnusedWorkspaceOption(
   program
     .command("sandbox-allow")
-    .description("Add the local settings directory to the Codex sandbox allowlist")
+    .description("Add the local settings directory to the Codex/Antigravity sandbox allowlist")
     .option("--json", "machine-readable output", false)
 )
-  .action((opts: { json: boolean }) => {
-    const result = trySandboxAllow();
+  .action((opts: { workspace?: string; json: boolean }) => {
+    const result = trySandboxAllow(opts.workspace ? resolveWorkspace(opts.workspace) : undefined);
     if (opts.json) {
       say(JSON.stringify(result));
       if (!result.ok) process.exitCode = 1;
       return;
     }
     if (!result.ok) {
-      cross(`无法写入 Codex 沙箱白名单：${result.error}`);
+      cross(`无法写入沙箱白名单：${result.error}`);
       process.exitCode = 1;
       return;
     }
     if (result.alreadyAllowed) check("沙箱白名单已就绪，后续对话无需再提权");
-    else check("已将本地设置目录加入 Codex 沙箱白名单（后续对话无需再提权）");
+    else check("已将本地设置目录加入沙箱白名单（后续对话无需再提权）");
+    if (result.antigravity) {
+      if (result.antigravity.alreadyAllowed) check("Antigravity CLI 白名单已就绪");
+      else if (result.antigravity.added) check("已将工作区与本地设置加入 Antigravity CLI 白名单");
+    }
+  });
+
+// ---------------------------------------------------------------- install-skill (Codex & Antigravity)
+
+program
+  .command("install-skill")
+  .alias("skill-install")
+  .description("Install C2C agent skill for Codex and/or Antigravity")
+  .option("-t, --target <target>", "codex, antigravity, or all", "all")
+  .option("-s, --scope <scope>", "global, workspace, or all", "all")
+  .option("-w, --workspace <path>", "workspace root path")
+  .option("--json", "machine-readable output", false)
+  .action((opts: { target: string; scope: string; workspace?: string; json: boolean }) => {
+    const res = installSkills({
+      target: opts.target as SkillTarget,
+      scope: opts.scope as SkillScope,
+      workspaceRoot: opts.workspace ? resolveWorkspace(opts.workspace) : undefined,
+    });
+    if (opts.json) {
+      say(JSON.stringify(res));
+      if (!res.ok) process.exitCode = 1;
+      return;
+    }
+    if (res.ok) {
+      for (const loc of res.installed) {
+        check(`已安装 ${loc.agent} Skill (${loc.scope}): ${loc.destFile}`);
+      }
+    } else {
+      for (const err of res.errors) {
+        cross(err);
+      }
+      process.exitCode = 1;
+    }
   });
 
 // ---------------------------------------------------------------- update-check (once per local day)
@@ -997,6 +1044,168 @@ session
     if (!result.cleared) say("尚未记录 ChatGPT 会话。");
     else if (result.keptProject) check("已清除当前对话，合集绑定仍保留");
     else check("已清除会话记录，下次任务将新建 ChatGPT 会话");
+  });
+
+session
+  .command("open")
+    .description("Open the saved ChatGPT chat or project in the default browser")
+    .option("-w, --workspace <path>")
+    .action(async (opts: { workspace?: string }) => {
+      const workspace = new Workspace(resolveWorkspace(opts.workspace));
+      const saved = readSession(workspace.id);
+      const url = saved?.url ?? saved?.projectUrl ?? "https://chatgpt.com/";
+      say(`正在打开 ChatGPT: ${url}`);
+      await openBrowserUrl(url);
+    });
+
+program
+  .command("open")
+  .description("Open the saved ChatGPT chat or project in the default browser")
+  .option("-w, --workspace <path>")
+  .action(async (opts: { workspace?: string }) => {
+    const workspace = new Workspace(resolveWorkspace(opts.workspace));
+    const saved = readSession(workspace.id);
+    const url = saved?.url ?? saved?.projectUrl ?? "https://chatgpt.com/";
+    say(`正在打开 ChatGPT: ${url}`);
+    await openBrowserUrl(url);
+  });
+
+// ---------------------------------------------------------------- prompt (C2C protocol generator)
+
+const promptCmd = program
+  .command("prompt")
+  .description("Generate C2C protocol prompts for ChatGPT Web");
+
+promptCmd
+  .command("boot")
+  .description("Show the C2C boot prompt for new ChatGPT chats")
+  .option("--json", "machine-readable output", false)
+  .action((opts: { json: boolean }) => {
+    if (opts.json) say(JSON.stringify({ ok: true, prompt: BOOT_PROMPT }));
+    else say(BOOT_PROMPT);
+  });
+
+promptCmd
+  .command("init")
+  .description("Generate [C2C] STATE: INIT prompt for a new coding task")
+  .requiredOption("-g, --goal <goal>", "task goal description")
+  .option("-t, --task <id>", "task ID")
+  .option("-i, --iteration <n>", "iteration number", "0")
+  .option("-w, --workspace <path>", "workspace root path")
+  .option("--open", "also open the ChatGPT chat/project in browser", false)
+  .option("--json", "machine-readable output", false)
+  .action(async (opts: { goal: string; task?: string; iteration: string; workspace?: string; open: boolean; json: boolean }) => {
+    const root = resolveWorkspace(opts.workspace);
+    const workspace = new Workspace(root);
+    const sessionData = readSession(workspace.id);
+    const taskId = opts.task ?? sessionData?.taskId ?? `c2c_${crypto.randomBytes(2).toString("hex")}`;
+    const iteration = parseInt(opts.iteration, 10);
+    const connectorName = sessionData?.connectorName ?? `Codex with ChatGPT · ${workspace.name}`;
+    const prompt = buildInitPrompt({ taskId, iteration, goal: opts.goal, connectorName });
+
+    if (opts.open) {
+      const url = sessionData?.url ?? sessionData?.projectUrl ?? "https://chatgpt.com/";
+      await openBrowserUrl(url);
+    }
+
+    if (opts.json) say(JSON.stringify({ ok: true, taskId, iteration, prompt }));
+    else say(prompt);
+  });
+
+promptCmd
+  .command("executed")
+  .description("Generate [C2C] STATE: EXECUTED prompt after local execution")
+  .option("-t, --task <id>", "task ID")
+  .option("-i, --iteration <n>", "iteration number")
+  .option("-c, --changed-files <n>", "number of changed files")
+  .option("--tests <summary>", "test summary")
+  .option("--status <status>", "exit status (ok, error)", "ok")
+  .option("-s, --summary <text>", "execution summary")
+  .option("-w, --workspace <path>", "workspace root path")
+  .option("--open", "also open the ChatGPT chat/project in browser", false)
+  .option("--json", "machine-readable output", false)
+  .action(async (opts: {
+    task?: string;
+    iteration?: string;
+    changedFiles?: string;
+    tests?: string;
+    status?: string;
+    summary?: string;
+    workspace?: string;
+    open: boolean;
+    json: boolean;
+  }) => {
+    const root = resolveWorkspace(opts.workspace);
+    const workspace = new Workspace(root);
+    const sessionData = readSession(workspace.id);
+    const taskId = opts.task ?? sessionData?.taskId ?? "c2c_0000";
+    const iteration = opts.iteration ? parseInt(opts.iteration, 10) : (sessionData?.iteration ?? 1);
+    const changedFiles = opts.changedFiles ? parseInt(opts.changedFiles, 10) : undefined;
+    const prompt = buildExecutedPrompt({
+      taskId,
+      iteration,
+      changedFiles,
+      tests: opts.tests,
+      exitStatus: opts.status,
+      summary: opts.summary,
+    });
+
+    if (opts.open) {
+      const url = sessionData?.url ?? sessionData?.projectUrl ?? "https://chatgpt.com/";
+      await openBrowserUrl(url);
+    }
+
+    if (opts.json) say(JSON.stringify({ ok: true, taskId, iteration, prompt }));
+    else say(prompt);
+  });
+
+promptCmd
+  .command("handoff")
+  .description("Generate [C2C] STATE: HANDOFF prompt for a new chat continuing a task")
+  .requiredOption("-g, --goal <goal>", "original goal")
+  .requiredOption("-p, --progress <progress>", "completed progress brief")
+  .requiredOption("-s, --state <state>", "current state")
+  .requiredOption("-n, --next-step <step>", "next expected step")
+  .option("-k, --known-issues <issues>", "known issues")
+  .option("-t, --task <id>", "task ID")
+  .option("-i, --iteration <n>", "iteration number", "1")
+  .option("-w, --workspace <path>", "workspace root path")
+  .option("--open", "also open the ChatGPT chat/project in browser", false)
+  .option("--json", "machine-readable output", false)
+  .action(async (opts: {
+    goal: string;
+    progress: string;
+    state: string;
+    nextStep: string;
+    knownIssues?: string;
+    task?: string;
+    iteration: string;
+    workspace?: string;
+    open: boolean;
+    json: boolean;
+  }) => {
+    const root = resolveWorkspace(opts.workspace);
+    const workspace = new Workspace(root);
+    const sessionData = readSession(workspace.id);
+    const taskId = opts.task ?? sessionData?.taskId ?? "c2c_0000";
+    const iteration = parseInt(opts.iteration, 10);
+    const prompt = buildHandoffPrompt({
+      taskId,
+      iteration,
+      goal: opts.goal,
+      progress: opts.progress,
+      currentState: opts.state,
+      knownIssues: opts.knownIssues,
+      nextStep: opts.nextStep,
+    });
+
+    if (opts.open) {
+      const url = sessionData?.url ?? sessionData?.projectUrl ?? "https://chatgpt.com/";
+      await openBrowserUrl(url);
+    }
+
+    if (opts.json) say(JSON.stringify({ ok: true, taskId, iteration, prompt }));
+    else say(prompt);
   });
 
 const prefsCmd = program

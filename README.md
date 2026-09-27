@@ -1,255 +1,228 @@
 # Codex with ChatGPT
 
-> ChatGPT thinks. Codex works.
-> ChatGPT 负责思考，Codex 负责干活。
+> ChatGPT suy nghĩ. Codex / Antigravity thực thi.
 
 > [!IMPORTANT]
-> **遇到问题？** 请先向 Codex 发送 **「更新 Codex with ChatGPT」** 并重试。更新到最新版本可以解决大多数已知问题。  
-> **Having trouble?** First ask Codex to **“Update Codex with ChatGPT”** and try again. Updating to the latest version resolves most known issues.
+> **Gặp lỗi?** Hãy bảo Agent của bạn (Codex hoặc Antigravity) **"Cập nhật Codex with ChatGPT"** rồi thử lại. Nâng lên phiên bản mới nhất sẽ khắc phục hầu hết các lỗi đã biết.
 
-## The problem · 解决什么问题
+## Giải quyết vấn đề gì
 
-**中文** — ChatGPT 付费订阅的网页版额度大量闲置，Codex 却在消耗紧张的
-API 额度做规划和 Review。本项目把"思考"交给你已付费的网页版 ChatGPT，
-Codex 只负责执行。不用 API Key、不搞逆向代理——官方网页 + 只读 MCP 桥接。
+Bạn đang trả tiền cho ChatGPT Plus/Pro nhưng quota web hầu như không dùng hết,
+trong khi đó coding agent (Codex, Antigravity CLI…) lại đốt token API đắt đỏ
+chỉ để lập kế hoạch và review code. Dự án này chuyển phần **"suy nghĩ"** sang
+ChatGPT web — thứ bạn đã trả tiền — còn agent local chỉ việc **thực thi**.
+Không cần API Key, không reverse proxy — chỉ dùng giao diện web chính thức
+kết hợp cầu nối MCP **chỉ đọc**.
 
-**EN** — ChatGPT Plus/Pro web quota sits idle while your coding agent burns
-scarce API/Codex tokens on planning and review. This project moves the
-thinking to the subscription you already pay for; Codex only executes.
-No API keys, no reverse proxy — official web UI plus a read-only MCP bridge.
+## Dự án này là gì
 
-## What it is · 这是什么
+Biến ChatGPT web thành **"bộ não quy hoạch và review"** cho phiên code của bạn,
+trong khi agent local (Codex hoặc Antigravity CLI) nắm toàn quyền thực thi.
+Mã nguồn của bạn **không bao giờ bị upload** — ChatGPT đọc đúng những dòng code
+cần thiết qua kết nối MCP **chỉ đọc**, được bảo vệ bằng OAuth.
 
-**中文** — 把 ChatGPT 网页版变成 Codex 编码会话的"规划与审查大脑"，执行权
-完全保留在 Codex 手里。你的仓库永远不会被上传：ChatGPT 通过一条安全的、
-OAuth 保护的**只读** MCP 连接，按需读取当前工作区里它真正需要的那几行代码。
-
-**EN** — Use the ChatGPT web app as the planning and review brain for your
-Codex coding sessions, while Codex keeps full ownership of execution. Your
-repository is never uploaded: ChatGPT reads exactly the lines it needs through
-a secure, OAuth-protected, **read-only** MCP connection to your current
-workspace.
-
-Detailed docs below are in English · 详细中文文档见 **[README.zh-CN.md](README.zh-CN.md)**
-
-## One-paste install · 一段话安装
-
-**中文** — 不懂 git、Node、终端？完全不需要懂。把下面这段话原样复制给你的
-编码 Agent（Codex），然后去倒杯咖啡：
-
-```text
-请帮我完整安装并配置 Codex with ChatGPT，全程自动，我是不懂技术的小白，
-所有事情你自己做：
-
-1. 环境自检：需要 git 和 Node.js ≥ 20，缺什么就自动安装
-  （macOS 用 Homebrew，Windows 用 winget），同时安装 cloudflared。
-2. 下载：把 https://github.com/XiaoDuoYa/codex-with-chatgpt 克隆到
-   ~/codex-with-chatgpt（已存在就 git pull 更新）。
-3. 构建：在该目录里执行 corepack pnpm install 和 corepack pnpm build。
-4. 安装 Skill：把仓库里的 skill/SKILL.md 复制到
-   ~/.codex/skills/codex-with-chatgpt/SKILL.md，并把文件中
-   "The codex-with-chatgpt checkout lives at:" 那一行的路径改成实际克隆路径。
-5. 首次配置：按 SKILL.md 里的 first-time setup 流程执行
-  （运行 c2c setup，用内置浏览器打开 ChatGPT 配置连接器并输入配对码）。
-   全程只用内置浏览器，禁止打开任何第三方浏览器。
-6. 只有遇到需要我登录（ChatGPT / Cloudflare）、验证码或两步验证时才叫我，
-   而且一次只告诉我一个动作。
-7. 完成后给我看 ✓ 清单，并确认文件读取测试通过。我不懂 MCP、OAuth、
-   Tunnel、端口这些词，不要向我解释；出了问题先自己修。
-```
-
-
-**EN** — Don't know git, Node, or terminals? You don't need to. Copy the
-paragraph below, paste it to your coding agent (Codex), and go grab a coffee:
-
-```text
-Please install and configure "Codex with ChatGPT" for me, fully automatically.
-I am a non-technical user — do everything yourself:
-
-1. Check the environment: git and Node.js >= 20 must be available. Install
-   anything missing yourself (macOS: Homebrew, Windows: winget). Also install
-   cloudflared.
-2. Download: clone https://github.com/XiaoDuoYa/codex-with-chatgpt into
-   ~/codex-with-chatgpt (if it already exists, git pull to update).
-3. Build: inside that folder run `corepack pnpm install` then `corepack pnpm build`.
-4. Install the Skill: copy skill/SKILL.md to
-   ~/.codex/skills/codex-with-chatgpt/SKILL.md, and update the line
-   "The codex-with-chatgpt checkout lives at:" to the actual clone path.
-5. First-time setup: follow the SKILL.md "first-time setup" workflow
-   (run c2c setup, configure the ChatGPT connector in the BUILT-IN browser,
-   enter the pairing code). Never open a third-party browser.
-6. Only interrupt me for logins (ChatGPT / Cloudflare), CAPTCHAs or 2FA —
-   and give me exactly ONE action at a time.
-7. When done, show me the ✓ checklist and confirm the file-read test passed.
-   I don't know what MCP, OAuth, tunnels or ports are. Don't explain them.
-   If anything breaks, fix it yourself first.
-```
-
-
-**Updates · 更新** — The Skill checks GitHub once a day and updates itself when a
-new version is released; no action needed. You can also say "更新 Codex with ChatGPT"
-anytime. / Skill 每天自动检查一次 GitHub，有新版本会自动更新，无需任何操作；
-也可以随时对 Codex 说"更新 Codex with ChatGPT"。
+Hỗ trợ cả **Codex (OpenAI)** và **Antigravity CLI (`agy` — Google)**.
 
 ---
 
-*The sections below are in English. 以下详细内容为英文，中文完整版见
-[README.zh-CN.md](README.zh-CN.md)。*
+## Cài đặt một phát (dành cho người không rành kỹ thuật)
 
-## Install → Setup → Use (manual)
+Không biết git, Node, hay terminal? Không sao. Copy đoạn dưới đây, dán cho
+Agent của bạn (Codex hoặc Antigravity), rồi đi pha cà phê:
 
-1. Install the Codex Skill: copy `skill/` to `~/.codex/skills/codex-with-chatgpt/`.
-2. Tell Codex: **"Set up Codex with ChatGPT."** (中文: "使用 Codex with ChatGPT 完成首次配置。")
-3. Use Codex normally: **"Use Codex with ChatGPT to implement XXX."**
+### Cho Codex:
 
-That's the whole manual. You don't need to know what MCP, OAuth, tunnels,
-ports or localhost are — Codex configures everything automatically and you
-just see:
+```text
+Hãy cài đặt và cấu hình "Codex with ChatGPT" cho tôi, tự động hoàn toàn.
+Tôi không biết kỹ thuật — bạn tự làm hết:
+
+1. Kiểm tra môi trường: cần git và Node.js >= 20. Thiếu gì thì tự cài
+   (macOS: Homebrew, Windows: winget). Cài thêm cloudflared.
+2. Clone https://github.com/Houji-AOSP/codex-with-chatgpt vào
+   ~/codex-with-chatgpt (đã có thì git pull).
+3. Build: chạy `corepack pnpm install` rồi `corepack pnpm build`.
+4. Cài Skill: chạy `node bin/c2c.js install-skill --target codex`.
+5. Cấu hình lần đầu: chạy `c2c setup`, kết nối connector ChatGPT, nhập mã ghép nối.
+6. Chỉ gọi tôi khi cần đăng nhập (ChatGPT / Cloudflare), CAPTCHA hoặc 2FA —
+   mỗi lần chỉ bảo tôi MỘT thao tác.
+7. Xong thì cho tôi xem danh sách ✓ và xác nhận test đọc file đã pass.
+```
+
+### Cho Antigravity CLI (`agy`):
+
+```text
+Hãy cài đặt và cấu hình "Antigravity with ChatGPT" cho tôi, tự động hoàn toàn.
+Tôi không biết kỹ thuật — bạn tự làm hết:
+
+1. Kiểm tra môi trường: cần git và Node.js >= 20. Thiếu gì thì tự cài.
+   Cài thêm cloudflared.
+2. Clone https://github.com/Houji-AOSP/codex-with-chatgpt vào
+   ~/codex-with-chatgpt (đã có thì git pull).
+3. Build: chạy `corepack pnpm install` rồi `corepack pnpm build`.
+4. Cài Skill cho Antigravity: chạy `node bin/c2c.js install-skill --target antigravity`.
+5. Thêm workspace vào whitelist: chạy `node bin/c2c.js sandbox-allow`.
+6. Cấu hình lần đầu: chạy `node bin/c2c.js setup`, kết nối connector trong
+   ChatGPT web, nhập mã ghép nối.
+7. Xong thì cho tôi xem danh sách ✓ và xác nhận test đọc file đã pass.
+```
+
+**Cập nhật tự động**: Skill tự kiểm tra GitHub mỗi ngày. Bạn cũng có thể nói
+"Cập nhật Codex with ChatGPT" bất cứ lúc nào.
+
+---
+
+## Cài đặt → Cấu hình → Sử dụng (thủ công)
+
+### Cho Codex:
+1. Cài Skill: `node bin/c2c.js install-skill --target codex`
+   (hoặc copy `skill/` vào `~/.codex/skills/codex-with-chatgpt/`).
+2. Bảo Codex: **"Set up Codex with ChatGPT."**
+3. Sử dụng: **"Use Codex with ChatGPT to implement XXX."**
+
+### Cho Antigravity CLI (`agy`):
+1. Cài Skill: `node bin/c2c.js install-skill --target antigravity`
+   (tự động cài vào `~/.gemini/config/skills/antigravity-with-chatgpt/SKILL.md`).
+2. Chạy setup: `node bin/c2c.js setup` rồi kết nối MCP connector trong ChatGPT web.
+3. Sử dụng: **"Dùng Antigravity with ChatGPT để lên kế hoạch và thực hiện XXX."**
+   Antigravity CLI phối hợp qua `c2c prompt` và `c2c open`.
+
+Hết. Bạn không cần biết MCP, OAuth, tunnel, port, localhost là gì — Agent tự
+cấu hình mọi thứ và bạn chỉ thấy:
 
 ```
-Codex with ChatGPT
+Antigravity with ChatGPT       (hoặc "Codex with ChatGPT")
 
-✓ Project detected
-✓ Workspace Bridge started
-✓ Secure connection established
-✓ ChatGPT connected
-✓ File read test passed
+✓ Đã nhận diện dự án
+✓ Workspace Bridge đã khởi động
+✓ Kết nối bảo mật đã thiết lập
+✓ ChatGPT đã kết nối
+✓ Test đọc file đã pass
 
 Ready.
 ```
 
-The only steps that may need you: logging into ChatGPT (and, if you want a
-stable hostname, logging into Cloudflare once). A **new** workspace also asks
-you to create a ChatGPT Project (collection) once — pick **project-only
-memory**, name it after the workspace. If the sidebar has no Projects row,
-hover **Chats**, open the … menu, and choose **Organize by project**. Codex
-then saves that collection link and starts chats from that page. Existing
-workspaces that already have a C2C chat stay on the old one-conversation
-style until you ask to switch.
+Bước duy nhất có thể cần bạn: đăng nhập ChatGPT (và nếu muốn domain cố định,
+đăng nhập Cloudflare một lần). **Workspace mới** sẽ hỏi bạn tạo một ChatGPT
+Project (bộ sưu tập) — đặt tên theo workspace, chọn **chỉ nhớ trong project**.
 
-### Optional stable hostname
+### Domain cố định (tùy chọn)
 
-The default public address is a temporary Cloudflare URL. It changes when the
-bridge restarts, and Codex repairs ChatGPT by deleting that workspace's
-connector and adding it again.
+Địa chỉ công khai mặc định là URL tạm của Cloudflare — thay đổi khi bridge
+khởi động lại. Agent sẽ tự xóa connector cũ và tạo lại.
 
-If you have a Cloudflare account and a domain already on Cloudflare, first-time
-setup (and the next coding session, once) will ask whether you want a stable
-hostname such as `c2c-<project>.your-domain.com`. That path opens a browser so
-you can authorize Cloudflare. After that, the ChatGPT connector keeps working
-across restarts. If you skip it, or the login fails, Codex stays on the temporary
-address — same features, just a slower repair.
+Nếu bạn có tài khoản Cloudflare và domain đã thêm trên Cloudflare, lần cấu
+hình đầu sẽ hỏi bạn có muốn domain cố định (VD: `c2c-<project>.domain.com`)
+không. Chọn có → đăng nhập Cloudflare một lần. Sau đó connector giữ nguyên
+qua các lần khởi động lại. Không có/không muốn? Vẫn dùng được, chỉ sửa chậm hơn.
 
-Credentials stay in the OS app state directory, not in the project.
+---
 
-## How it works
+## Cách hoạt động
 
 ```
              ┌───────────────────────────┐
              │       ChatGPT Web         │
-             │  Reason / Plan / Review   │
+             │  Suy nghĩ / Lập kế hoạch │
+             │       / Review           │
              └──────────┬──────────▲─────┘
                         │          │
-               MCP      │          │ Computer Use
-            Data Plane  │          │ Control Plane (<1 KB messages)
+               MCP      │          │ Tin nhắn điều khiển
+           (Dữ liệu)   │          │ (< 1 KB)
                         ▼          │
              ┌─────────────────────┐
-             │      C2C Bridge     │   loopback-only HTTP server
-             │  read-only MCP      │   OAuth 2.1 + one-time pairing code
-             │  OAuth + Pairing    │   Cloudflare Quick Tunnel
-             │  Tunnel Manager     │
+             │      C2C Bridge     │   HTTP chỉ localhost
+             │  MCP chỉ đọc       │   OAuth 2.1 + mã ghép nối
+             │  OAuth + Pairing    │   Cloudflare Tunnel
              └──────────┬──────────┘
-                        │  read-only
+                        │  chỉ đọc
                         ▼
-             ┌─────────────────────┐          ┌─────────────────────┐
-             │   Local Workspace   │◀─────────│    Codex Harness    │
-             └─────────────────────┘ edit/git │ shell / tests / fix │
-                                              └─────────────────────┘
+             ┌─────────────────────┐          ┌──────────────────────────┐
+             │   Workspace local   │◀─────────│  Codex / Antigravity CLI │
+             └─────────────────────┘ sửa/git  │  shell / test / sửa lỗi  │
+                                              └──────────────────────────┘
 ```
 
-- **Control plane (Computer Use)**: Codex and ChatGPT exchange tiny structured
-  `[C2C]` state messages — `INIT → PLAN → EXECUTED → REVIEW → DONE`. No diffs,
-  no logs, no file bodies are ever pasted.
-- **Data plane (MCP)**: ChatGPT pulls what it needs itself through 9 read-only
-  tools: `workspace_info`, `list_directory`, `read_file`, `search_workspace`,
+- **Mặt phẳng điều khiển**: Agent local và ChatGPT trao đổi tin nhắn cấu trúc
+  `[C2C]` cực nhỏ — `INIT → PLAN → EXECUTED → REVIEW → DONE`. Không bao giờ
+  dán diff, log, hay nội dung file.
+- **Mặt phẳng dữ liệu (MCP)**: ChatGPT tự kéo những gì cần qua 9 công cụ
+  chỉ đọc: `workspace_info`, `list_directory`, `read_file`, `search_workspace`,
   `git_status`, `git_diff`, `test_status`, `execution_summary`,
   `execution_output`.
-- **Independent review**: after Codex executes, ChatGPT inspects the actual
-  git diff and test records through MCP — it never trusts "all tests passed"
-  claims blindly.
+- **Review độc lập**: sau khi agent thực thi, ChatGPT tự kiểm tra git diff
+  và kết quả test qua MCP — không tin mù rằng "test đã pass".
 
-## Security model (short version)
+## Mô hình bảo mật (tóm tắt)
 
-- **Read-only by construction**: write/delete/shell/commit tools simply do not
-  exist on the server. No prompt injection can enable them.
-- **One workspace = one boundary**: every token is bound to a single workspace;
-  path containment uses canonical realpaths (symlink/`../`/absolute-path escapes
-  are all blocked and tested).
-- **Sensitive files never leave**: `.env*`, keys, SSH, credentials are denied by
-  default (`.env.example` allowed); `.c2cignore` adds your own rules.
-- **Knowing the URL grants nothing**: the public MCP endpoint requires OAuth 2.1
-  (PKCE S256, dynamic client registration, rotating refresh tokens). Without a
-  token: 401. Wrong workspace: 403.
-- **The model never sees long-lived credentials**: the only secret that ever
-  touches a browser is a one-time pairing code (5-minute TTL, 5 attempts,
-  rate-limited, destroyed on use).
+- **Chỉ đọc từ cấu trúc**: server không có tool ghi/xóa/shell/commit.
+  Không prompt injection nào có thể kích hoạt chúng.
+- **Một workspace = một ranh giới**: mỗi token gắn với một workspace duy nhất;
+  kiểm tra đường dẫn dùng realpath chuẩn (chặn symlink/`../`/đường dẫn tuyệt đối).
+- **File nhạy cảm không bao giờ lộ**: `.env*`, key, SSH, credentials bị chặn
+  mặc định (`.env.example` được phép); `.c2cignore` thêm quy tắc tùy chỉnh.
+- **Biết URL không có nghĩa có quyền**: endpoint MCP yêu cầu OAuth 2.1
+  (PKCE S256, đăng ký client động, xoay refresh token). Không có token: 401.
+  Token sai workspace: 403.
+- **Model không bao giờ thấy credential dài hạn**: bí mật duy nhất xuất hiện
+  trên trình duyệt là mã ghép nối một lần (hết hạn 5 phút, tối đa 5 lần thử,
+  giới hạn tốc độ, hủy sau khi dùng).
 
-Full threat model: [docs/security.md](docs/security.md)
+Chi tiết: [docs/security.md](docs/security.md)
 
-## For developers
+## Dành cho lập trình viên
 
 ```bash
 pnpm install
-pnpm build          # -> dist/, exposes the `c2c` bin
-pnpm test           # vitest: 150 tests (path security, OAuth, pairing, MCP e2e)
+pnpm build          # → dist/, lộ lệnh `c2c`
+pnpm test           # vitest: 181+ test (bảo mật đường dẫn, OAuth, MCP e2e)
 
-c2c setup           # bridge + tunnel + pairing code, all in one
-c2c sandbox-allow   # whitelist the settings dir in Codex (macOS + Windows)
+c2c setup           # bridge + tunnel + mã ghép nối, tất cả trong một
+c2c install-skill   # cài Skill cho Codex & Antigravity
+c2c sandbox-allow   # thêm thư mục cài đặt vào whitelist Codex & Antigravity
+c2c prompt boot     # sinh prompt khởi động C2C cho ChatGPT
+c2c prompt init     # sinh prompt [C2C] STATE: INIT
+c2c prompt executed # sinh prompt [C2C] STATE: EXECUTED
+c2c open            # mở cuộc trò chuyện ChatGPT hiện tại
 c2c status / doctor / pair / unpair / logs / stop
 ```
 
-Requirements: Node.js >= 20, git. `cloudflared` for the public connection
-(auto-detected; the Skill installs it for you). If QUIC is blocked, set
-`C2C_TUNNEL_PROTOCOL=http2` and restart the bridge.
+Yêu cầu: Node.js >= 20, git. `cloudflared` cho kết nối công khai
+(tự phát hiện; Skill sẽ cài cho bạn). Nếu QUIC bị chặn, đặt
+`C2C_TUNNEL_PROTOCOL=http2` rồi khởi động lại bridge.
 
-Docs: [architecture](docs/architecture.md) · [protocol](docs/protocol.md) ·
-[security](docs/security.md) · [troubleshooting](docs/troubleshooting.md)
+Tài liệu: [kiến trúc](docs/architecture.md) · [giao thức](docs/protocol.md) ·
+[bảo mật](docs/security.md) · [xử lý sự cố](docs/troubleshooting.md)
 
-## Project layout
+## Cấu trúc dự án
 
 ```
 src/
-  bridge/     loopback HTTP server, port recovery, admin API
-  mcp/        9 read-only tools, stateless Streamable HTTP
-  auth/       OAuth 2.1 (PKCE, DCR, refresh rotation, revocation)
-  pairing/    one-time pairing codes (CSPRNG, TTL, rate limits)
-  workspace/  path containment, sensitive-file policy, search, git
-  tunnel/     TunnelProvider abstraction + Cloudflare Quick/Named Tunnel
-  execution/  execution records for the review loop
-  process/    daemon lifecycle
-  cli/        the c2c CLI
-skill/        the Codex Skill (the real UX layer)
-tests/        unit + integration tests
-docs/         architecture / protocol / security / troubleshooting
+  bridge/     HTTP server localhost, khôi phục port, admin API
+  mcp/        9 công cụ chỉ đọc, Streamable HTTP stateless
+  auth/       OAuth 2.1 (PKCE, đăng ký động, xoay refresh, thu hồi)
+  pairing/    mã ghép nối một lần (CSPRNG, TTL, giới hạn tốc độ)
+  workspace/  kiểm tra đường dẫn, chính sách file nhạy cảm, tìm kiếm, git
+  tunnel/     TunnelProvider + Cloudflare Quick/Named Tunnel
+  execution/  bản ghi thực thi cho vòng lặp review
+  process/    quản lý vòng đời daemon
+  cli/        CLI c2c
+  prompt/     template prompt C2C cho ChatGPT
+  config/     cấu hình sandbox, skill-install, endpoint, session
+  util/       tiện ích (mở trình duyệt, v.v.)
+skill/          Codex Skill (lớp UX)
+skill/antigravity/  Antigravity Skill
+tests/          unit + integration test
+docs/           kiến trúc / giao thức / bảo mật / xử lý sự cố
 ```
 
-## Status & disclaimer
+## Trạng thái & Tuyên bố
 
-V1. Verified end-to-end: bridge, OAuth + pairing, public tunnel, ChatGPT
-connector setup, zero-touch first-run experience.
+V1. Đã xác minh end-to-end: Bridge, OAuth + ghép nối, tunnel công khai,
+cấu hình ChatGPT connector, trải nghiệm cấu hình lần đầu tự động.
+Hỗ trợ cả Codex (OpenAI) và Antigravity CLI (Google).
 
-**Unofficial community project. Not affiliated with or endorsed by OpenAI.**
+**Dự án cộng đồng không chính thức. Không liên kết hay được OpenAI/Google chứng nhận.**
 
-## License
+## Giấy phép
 
 [MIT](LICENSE)
-
-## Star History
-
-<a href="https://www.star-history.com/?repos=xiaoduoya%2Fcodex-with-chatgpt&type=date&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=xiaoduoya/codex-with-chatgpt&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=xiaoduoya/codex-with-chatgpt&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=xiaoduoya/codex-with-chatgpt&type=date&legend=top-left" />
- </picture>
-</a>
